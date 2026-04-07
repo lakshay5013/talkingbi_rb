@@ -39,7 +39,7 @@ export default function InsightPanel({ filters, onExplore }) {
   const fetchTab = useCallback(async (tabId) => {
     setLoading(prev => ({ ...prev, [tabId]: true }));
     try {
-      if (filters?.useUserDb) {
+      if (filters?.useUserDb || filters?.datasetId) {
         const prompts = {
           descriptive: 'Give descriptive insights from this connected database result set.',
           diagnostic: 'Explain why the main trends are happening in this connected database.',
@@ -81,7 +81,7 @@ export default function InsightPanel({ filters, onExplore }) {
   }, [activeTab, fetchTab]);
 
   useEffect(() => {
-    if (filters?.useUserDb) {
+    if (filters?.useUserDb || filters?.datasetId) {
       setDataQuality(null);
       return;
     }
@@ -91,7 +91,7 @@ export default function InsightPanel({ filters, onExplore }) {
   const handleExplore = async () => {
     setShowExploration(true);
     try {
-      if (filters?.useUserDb) {
+      if (filters?.useUserDb || filters?.datasetId) {
         const result = await apiPost('/api/chat', {
           query: 'Find anomalies and unusual patterns in this connected database data.',
           filters,
@@ -170,7 +170,7 @@ export default function InsightPanel({ filters, onExplore }) {
             </div>
           ) : tabData ? (
             <>
-              {filters?.useUserDb ? (
+              {filters?.useUserDb || filters?.datasetId ? (
                 <DatasetInsightTab data={tabData} />
               ) : (
                 <>

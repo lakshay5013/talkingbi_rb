@@ -11,11 +11,15 @@ const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'replace-with-secure-secret';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
+const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
 const DATASET_CACHE_TTL_MS = 60 * 60 * 1000;
-const MAX_FETCH_BYTES = 2 * 1024 * 1024;
-const MAX_DATASET_ROWS = 5000;
+const DASHBOARD_GENERATION_TTL_MS = 15 * 60 * 1000;
+const MAX_FETCH_BYTES = 25 * 1024 * 1024;
+const MAX_DATASET_ROWS = 20000;
 
 const datasetCache = new Map();
+const dashboardGenerationCharges = new Map();
 const userDbConnections = new Map();
 const PLATFORM_SCHEMAS = new Set([
   'auth',
@@ -94,6 +98,21 @@ function makeLimitError(message) {
 function getUsageTypeEnum(usageType) {
   if (usageType === 'dashboard_generation') return 'dashboard_generation';
   return 'chat';
+}
+
+function getDashboardGenerationKey(userId, generationId) {
+  const safeGenerationId = String(generationId || '').trim();
+  if (!safeGenerationId) return null;
+  return `${userId}:${safeGenerationId}`;
+}
+
+function pruneDashboardGenerationCharges() {
+  const now = Date.now();
+  for (const [key, ts] of dashboardGenerationCharges.entries()) {
+    if (now - ts > DASHBOARD_GENERATION_TTL_MS) {
+      dashboardGenerationCharges.delete(key);
+    }
+  }
 }
 
 async function countUsage(userId, usageType, windowDays) {
@@ -772,7 +791,7 @@ function fallbackSqlFromSchema(query, schema) {
 
 async function generateSqlFromNl({ query, schema }) {
   const fallbackSql = fallbackSqlFromSchema(query, schema);
-  if (!OPENAI_API_KEY || typeof fetch !== 'function') {
+  if (!GROQ_API_KEY || typeof fetch !== 'function') {
     return fallbackSql;
   }
 
@@ -780,15 +799,15 @@ async function generateSqlFromNl({ query, schema }) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        Authorization: `Bearer ${GROQ_API_KEY}`,
       },
       signal: controller.signal,
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: GROQ_MODEL,
         temperature: 0.1,
         messages: [
           {
@@ -1520,12 +1539,12 @@ router.post('/datasets/from-url', requireAuth, async (req, res) => {
 
     const contentLength = Number(response.headers.get('content-length') || 0);
     if (contentLength > MAX_FETCH_BYTES) {
-      return res.status(413).json({ error: 'Dataset is too large. Max size is 2 MB.' });
+      return res.status(413).json({ error: 'Dataset is too large. Max size is 25 MB.' });
     }
 
     const text = await response.text();
     if (text.length > MAX_FETCH_BYTES) {
-      return res.status(413).json({ error: 'Dataset is too large. Max size is 2 MB.' });
+      return res.status(413).json({ error: 'Dataset is too large. Max size is 25 MB.' });
     }
 
     const contentType = response.headers.get('content-type') || '';
@@ -1559,6 +1578,44 @@ router.post('/datasets/from-url', requireAuth, async (req, res) => {
       columns,
       sample: parsedRows.slice(0, 5),
       sourceType: normalized.source,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/datasets/from-csv', requireAuth, async (req, res) => {
+  try {
+    const csvText = String(req.body.csvText || '').trim();
+    if (!csvText) {
+      return res.status(400).json({ error: 'Please provide CSV data.' });
+    }
+
+    if (csvText.length > MAX_FETCH_BYTES) {
+      return res.status(413).json({ error: 'CSV is too large. Max size is 25 MB.' });
+    }
+
+    const parsedRows = parseDatasetText(csvText, 'text/csv').slice(0, MAX_DATASET_ROWS);
+    if (!parsedRows.length) {
+      return res.status(400).json({ error: 'No rows found in CSV data.' });
+    }
+
+    const columns = inferColumns(parsedRows);
+    const datasetId = `ds_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    datasetCache.set(datasetId, {
+      userId: req.user.id,
+      rows: parsedRows,
+      columns,
+      createdAt: Date.now(),
+      sourceUrl: null,
+    });
+
+    return res.status(201).json({
+      datasetId,
+      rowCount: parsedRows.length,
+      columns,
+      sample: parsedRows.slice(0, 5),
+      sourceType: 'csv-upload',
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -1665,6 +1722,7 @@ setInterval(() => {
       datasetCache.delete(key);
     }
   }
+  pruneDashboardGenerationCharges();
 }, 10 * 60 * 1000);
 
 setInterval(() => {
@@ -1673,15 +1731,36 @@ setInterval(() => {
   });
 }, 60 * 60 * 1000);
 
-async function applyUsagePolicy(user, usageType) {
+async function applyUsagePolicy(user, usageType, options = {}) {
   if (!user) {
     throw makeLimitError('Please login to use this feature.');
   }
 
   if (usageType === 'dashboard_generation') {
-    await enforceDashboardGenerationLimit(user);
-    await recordUsage(user.id, 'dashboard_generation');
-    return;
+    const generationKey = getDashboardGenerationKey(user.id, options.generationId);
+    if (generationKey && dashboardGenerationCharges.has(generationKey)) {
+      return { allowed: true, remaining: null, deduped: true };
+    }
+
+    if (generationKey) {
+      dashboardGenerationCharges.set(generationKey, Date.now());
+    }
+
+    try {
+      await enforceDashboardGenerationLimit(user);
+      await recordUsage(user.id, 'dashboard_generation');
+
+      if (generationKey) {
+        dashboardGenerationCharges.set(generationKey, Date.now());
+      }
+
+      return { allowed: true, remaining: null, deduped: false };
+    } catch (err) {
+      if (generationKey) {
+        dashboardGenerationCharges.delete(generationKey);
+      }
+      throw err;
+    }
   }
 
   await enforceChatLimit(user);

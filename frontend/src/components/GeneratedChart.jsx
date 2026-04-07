@@ -161,6 +161,7 @@ const withTimeout = (promise, timeoutMs = 4500) =>
 export default function GeneratedChart({ query, plan, onFollowup, filters, tier = 'core', isOpen = true, isLocked = false, visualMode = 'free' }) {
   const freeGraphRef = useRef(null);
   const premiumGraphRef = useRef(null);
+  const [isExporting, setIsExporting] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [chartType, setChartType] = useState('Bar Chart');
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -396,18 +397,18 @@ export default function GeneratedChart({ query, plan, onFollowup, filters, tier 
       }, 6000);
 
       try {
-        const dbMode = Boolean(filters?.useUserDb);
+        const dbMode = Boolean(filters?.useUserDb || filters?.datasetId);
         const [chatResult, salesResult, categoryResult, regionResult] = await Promise.allSettled(
           dbMode
             ? [
-                withTimeout(apiPost('/api/chat', { query, filters, usageType: 'dashboard_generation' })),
-              ]
+              withTimeout(apiPost('/api/chat', { query, filters, usageType: 'dashboard_generation' })),
+            ]
             : [
-                withTimeout(apiPost('/api/chat', { query, filters, usageType: 'dashboard_generation' })),
-                withTimeout(apiGet('/api/dashboards/sales-overview', filters)),
-                withTimeout(apiGet('/api/dashboards/category-analysis', filters)),
-                withTimeout(apiGet('/api/dashboards/regional-trends', filters)),
-              ]
+              withTimeout(apiPost('/api/chat', { query, filters, usageType: 'dashboard_generation' })),
+              withTimeout(apiGet('/api/dashboards/sales-overview', filters)),
+              withTimeout(apiGet('/api/dashboards/category-analysis', filters)),
+              withTimeout(apiGet('/api/dashboards/regional-trends', filters)),
+            ]
         );
 
         if (cancelled) return;
@@ -416,7 +417,7 @@ export default function GeneratedChart({ query, plan, onFollowup, filters, tier 
         const salesOverview = salesResult?.status === 'fulfilled' ? salesResult.value : {};
         const categoryAnalysis = categoryResult?.status === 'fulfilled' ? categoryResult.value : {};
         const regionalTrends = regionResult?.status === 'fulfilled' ? regionResult.value : {};
-        const datasetRequested = Boolean(filters?.useUserDb);
+        const datasetRequested = Boolean(filters?.useUserDb || filters?.datasetId);
         const datasetResponseActive = datasetRequested && (chatResponse?.provider === 'dataset-engine' || chatResponse?.provider === 'user-db-engine');
 
         const chatData = Array.isArray(chatResponse?.data)
@@ -453,19 +454,19 @@ export default function GeneratedChart({ query, plan, onFollowup, filters, tier 
           ? (
             isTimeSeriesFromChat && chatData.length > 0
               ? (isMonthSeriesFromChat
-                  ? sortMonthSeries(chatData).map((row) => ({ ...row, name: monthCodeToLabel(row.name) }))
-                  : isDateSeriesFromChat
-                    ? chatData.map((row) => ({ ...row, name: formatDateLabel(row.name) }))
-                    : chatData)
+                ? sortMonthSeries(chatData).map((row) => ({ ...row, name: monthCodeToLabel(row.name) }))
+                : isDateSeriesFromChat
+                  ? chatData.map((row) => ({ ...row, name: formatDateLabel(row.name) }))
+                  : chatData)
               : safeBar.map((row, index) => ({ name: row.name || `P${index + 1}`, value: row.value }))
           )
           : (
             isTimeSeriesFromChat && chatData.length > 0
               ? (isMonthSeriesFromChat
-                  ? sortMonthSeries(chatData).map((row) => ({ ...row, name: monthCodeToLabel(row.name) }))
-                  : isDateSeriesFromChat
-                    ? chatData.map((row) => ({ ...row, name: formatDateLabel(row.name) }))
-                    : chatData)
+                ? sortMonthSeries(chatData).map((row) => ({ ...row, name: monthCodeToLabel(row.name) }))
+                : isDateSeriesFromChat
+                  ? chatData.map((row) => ({ ...row, name: formatDateLabel(row.name) }))
+                  : chatData)
               : (safeBar.length > 0
                 ? safeBar
                 : (monthlyLine.length > 0
@@ -535,46 +536,119 @@ export default function GeneratedChart({ query, plan, onFollowup, filters, tier 
     [chartTitle]
   );
 
+  const UNSUPPORTED_COLOR_REGEX = /oklab|oklch|lch|lab|color\s*\(/gi;
+
+  const isUnsupportedColor = (value) => {
+    if (!value) return false;
+    UNSUPPORTED_COLOR_REGEX.lastIndex = 0;
+    return UNSUPPORTED_COLOR_REGEX.test(value);
+  };
+
+  const stripUnsupportedColors = (element) => {
+    if (!element || element.nodeType !== 1) return;
+    const style = element.style;
+    const colorProps = ['color', 'backgroundColor', 'borderColor', 'boxShadow', 'textShadow', 'fill', 'stroke'];
+    colorProps.forEach((prop) => {
+      const value = style.getPropertyValue(prop);
+      if (isUnsupportedColor(value)) {
+        style.removeProperty(prop);
+      }
+    });
+    const styleAttr = element.getAttribute('style');
+    if (styleAttr && isUnsupportedColor(styleAttr)) {
+      const cleaned = styleAttr
+        .split(';')
+        .filter(rule => !isUnsupportedColor(rule))
+        .join(';');
+      if (cleaned.trim()) {
+        element.setAttribute('style', cleaned);
+      } else {
+        element.removeAttribute('style');
+      }
+    }
+    Array.from(element.children || []).forEach(child => stripUnsupportedColors(child));
+  };
+
   const captureExportCanvas = useCallback(async (targetRef) => {
     if (!targetRef?.current) return null;
     const exportNode = targetRef.current.querySelector('[data-export-chart="true"]') || targetRef.current;
-    return html2canvas(exportNode, {
-      backgroundColor: null,
-      scale: Math.max(2, window.devicePixelRatio || 1),
-      useCORS: true,
-      logging: false,
-    });
+    const clonedNode = exportNode.cloneNode(true);
+    stripUnsupportedColors(clonedNode);
+    
+    try {
+      // Timeout wrapper for html2canvas (25 seconds max)
+      const canvasPromise = html2canvas(clonedNode, {
+        backgroundColor: null,
+        scale: 1.5, // Reduced from 2 for faster capture
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        windowHeight: clonedNode.scrollHeight,
+        windowWidth: clonedNode.scrollWidth,
+      });
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Chart capture timeout')), 25000)
+      );
+
+      return await Promise.race([canvasPromise, timeoutPromise]);
+    } catch (err) {
+      console.error('Canvas capture error:', err);
+      throw err;
+    }
   }, []);
 
   const handleExportPng = useCallback(async (targetRef, variant) => {
-    const canvas = await captureExportCanvas(targetRef);
-    if (!canvas) return;
-    const link = document.createElement('a');
-    link.download = `${exportFileNameBase}_${variant}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+    try {
+      setIsExporting(true);
+      const canvas = await captureExportCanvas(targetRef);
+      if (!canvas) {
+        alert('Failed to capture chart. Please try again.');
+        return;
+      }
+      const link = document.createElement('a');
+      link.download = `${exportFileNameBase}_${variant}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (err) {
+      alert(`PNG export failed: ${err?.message || 'Unknown error'}`);
+      console.error('PNG export error:', err);
+    } finally {
+      setIsExporting(false);
+    }
   }, [captureExportCanvas, exportFileNameBase]);
 
   const handleExportPdf = useCallback(async (targetRef, variant) => {
-    const canvas = await captureExportCanvas(targetRef);
-    if (!canvas) return;
-    const imageData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const imageRatio = canvas.width / canvas.height;
+    try {
+      setIsExporting(true);
+      const canvas = await captureExportCanvas(targetRef);
+      if (!canvas) {
+        alert('Failed to capture chart. Please try again.');
+        return;
+      }
+      const imageData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imageRatio = canvas.width / canvas.height;
 
-    let renderWidth = pageWidth - 36;
-    let renderHeight = renderWidth / imageRatio;
-    if (renderHeight > pageHeight - 36) {
-      renderHeight = pageHeight - 36;
-      renderWidth = renderHeight * imageRatio;
+      let renderWidth = pageWidth - 36;
+      let renderHeight = renderWidth / imageRatio;
+      if (renderHeight > pageHeight - 36) {
+        renderHeight = pageHeight - 36;
+        renderWidth = renderHeight * imageRatio;
+      }
+
+      const x = (pageWidth - renderWidth) / 2;
+      const y = (pageHeight - renderHeight) / 2;
+      pdf.addImage(imageData, 'PNG', x, y, renderWidth, renderHeight, undefined, 'FAST');
+      pdf.save(`${exportFileNameBase}_${variant}.pdf`);
+    } catch (err) {
+      alert(`PDF export failed: ${err?.message || 'Unknown error'}`);
+      console.error('PDF export error:', err);
+    } finally {
+      setIsExporting(false);
     }
-
-    const x = (pageWidth - renderWidth) / 2;
-    const y = (pageHeight - renderHeight) / 2;
-    pdf.addImage(imageData, 'PNG', x, y, renderWidth, renderHeight, undefined, 'FAST');
-    pdf.save(`${exportFileNameBase}_${variant}.pdf`);
   }, [captureExportCanvas, exportFileNameBase]);
 
   if (loadingStep < 3) {
@@ -1214,10 +1288,10 @@ export default function GeneratedChart({ query, plan, onFollowup, filters, tier 
               <h4>Free Graph (Open)</h4>
               <div className="chart-pane-actions">
                 <span className="pane-chip free">FREE</span>
-                <button onClick={() => handleExportPng(freeGraphRef, 'free_graph')} className="icon-btn export-pdf-btn" aria-label="Download free graph PNG">
+                <button onClick={() => handleExportPng(freeGraphRef, 'free_graph')} className="icon-btn export-pdf-btn disabled:opacity-50" disabled={isExporting} aria-label="Download free graph PNG" title={isExporting ? 'Exporting...' : 'Download PNG'}>
                   <Download className="w-4 h-4" />
                 </button>
-                <button onClick={() => handleExportPdf(freeGraphRef, 'free_graph')} className="icon-btn export-pdf-btn" aria-label="Download free graph PDF">
+                <button onClick={() => handleExportPdf(freeGraphRef, 'free_graph')} className="icon-btn export-pdf-btn disabled:opacity-50" disabled={isExporting} aria-label="Download free graph PDF" title={isExporting ? 'Exporting...' : 'Download PDF'}>
                   <FileText className="w-4 h-4" />
                 </button>
               </div>
@@ -1251,16 +1325,20 @@ export default function GeneratedChart({ query, plan, onFollowup, filters, tier 
                 </span>
                 <button
                   onClick={() => handleExportPng(premiumGraphRef, 'premium_graph')}
-                  className="icon-btn export-pdf-btn"
+                  className="icon-btn export-pdf-btn disabled:opacity-50"
+                  disabled={isExporting}
                   aria-label="Download premium graph PNG"
+                  title={isExporting ? 'Exporting...' : 'Download PNG'}
                   disabled={!hasPremiumAccess}
                 >
                   <Download className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => handleExportPdf(premiumGraphRef, 'premium_graph')}
-                  className="icon-btn export-pdf-btn"
+                  className="icon-btn export-pdf-btn disabled:opacity-50"
+                  disabled={isExporting}
                   aria-label="Download premium graph PDF"
+                  title={isExporting ? 'Exporting...' : 'Download PDF'}
                   disabled={!hasPremiumAccess}
                 >
                   <FileText className="w-4 h-4" />

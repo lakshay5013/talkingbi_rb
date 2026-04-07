@@ -17,6 +17,9 @@ export default function ChatbotV2({ isOpen, onClose, plan, filters, onUsageRefre
   const [queueSecondsLeft, setQueueSecondsLeft] = useState(0);
   const sessionIdRef = useRef(`session_${Date.now()}_${Math.random().toString(36).slice(2)}`);
   const queueIntervalRef = useRef(null);
+  const speakTimeoutRef = useRef(null);
+  const activeUtteranceRef = useRef(null);
+  const recognitionRef = useRef(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -28,10 +31,69 @@ export default function ChatbotV2({ isOpen, onClose, plan, filters, onUsageRefre
       if (queueIntervalRef.current) {
         clearInterval(queueIntervalRef.current);
       }
+      if (speakTimeoutRef.current) {
+        clearTimeout(speakTimeoutRef.current);
+      }
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
     };
   }, []);
 
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const speakReply = async (text) => {
+    if (!text || typeof window === 'undefined' || !('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
+      return;
+    }
+
+    const sanitized = String(text)
+      .replace(/\s+/g, ' ')
+      .replace(/₹\s*/g, ' rupees ')
+      .replace(/\bKPI\b/gi, 'key performance indicator')
+      .trim();
+
+    if (!sanitized) return;
+
+    if (speakTimeoutRef.current) {
+      clearTimeout(speakTimeoutRef.current);
+      speakTimeoutRef.current = null;
+    }
+
+    window.speechSynthesis.cancel();
+
+    speakTimeoutRef.current = setTimeout(() => {
+      const utter = new SpeechSynthesisUtterance(sanitized);
+      activeUtteranceRef.current = utter;
+      utter.lang = 'en-IN';
+      utter.pitch = 0.95;
+      utter.rate = 1.02;
+      utter.volume = 1;
+
+      const voices = window.speechSynthesis.getVoices?.() || [];
+      const preferredVoice = voices.find((voice) => /en[-_]?IN|en[-_]?US|en[-_]?GB/i.test(voice.lang || '')) || voices[0];
+      if (preferredVoice) {
+        utter.voice = preferredVoice;
+      }
+
+      utter.onend = () => {
+        if (activeUtteranceRef.current === utter) {
+          activeUtteranceRef.current = null;
+        }
+      };
+
+      utter.onerror = () => {
+        if (activeUtteranceRef.current === utter) {
+          activeUtteranceRef.current = null;
+        }
+      };
+
+      window.speechSynthesis.speak(utter);
+    }, 80);
+  };
 
   const handleSend = async () => {
     if (!input.trim() || isTyping || isQueued) return;
@@ -114,10 +176,7 @@ export default function ChatbotV2({ isOpen, onClose, plan, filters, onUsageRefre
         parsedQuery: response?.parsedQuery,
       }]);
       
-      const utter = new SpeechSynthesisUtterance(reply);
-      utter.pitch = 0.9;
-      utter.rate = 1.1;
-      window.speechSynthesis.speak(utter);
+      speakReply(reply);
     } catch (err) {
       if (queueIntervalRef.current) {
         clearInterval(queueIntervalRef.current);
@@ -134,11 +193,38 @@ export default function ChatbotV2({ isOpen, onClose, plan, filters, onUsageRefre
   };
 
   const startVoice = () => {
-    setIsListening(true);
-    setTimeout(() => {
-      setInput("What was the total revenue?");
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setInput((prev) => prev || 'What was the total revenue?');
+      return;
+    }
+
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-IN';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onresult = (event) => {
+      const transcript = event.results?.[0]?.[0]?.transcript?.trim();
+      if (transcript) {
+        setInput(transcript);
+      }
+    };
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => {
       setIsListening(false);
-    }, 2000);
+      recognitionRef.current = null;
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
   };
 
   return (

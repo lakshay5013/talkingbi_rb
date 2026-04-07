@@ -3,12 +3,10 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   CalendarRange,
   ChevronDown,
-  ChevronUp,
   ChartColumn,
   CreditCard,
   Filter,
   Globe,
-  Lock,
   Search,
   Sparkles,
   UserCircle2,
@@ -18,10 +16,9 @@ import {
 
 import Sidebar from './components/Sidebar';
 import SearchInterface from './components/SearchInterface';
-import GeneratedChart from './components/GeneratedChart';
-import InsightPanel from './components/InsightPanel';
 import PricingV3 from './components/PricingV3';
 import ChatbotV2 from './components/ChatbotV2';
+import CustomDashboardBuilder from './components/CustomDashboardBuilder';
 import LandingPage from './components/LandingPage';
 import LoginPage from './components/LoginPage';
 import SignupPage from './components/SignupPage';
@@ -57,7 +54,7 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const [user, setUser] = useState(null);
-  const [activeScreen, setActiveScreen] = useState('dashboard');
+  const [activeScreen, setActiveScreen] = useState('custom-dashboard-builder');
   const [activeNav, setActiveNav] = useState('dashboard');
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -72,12 +69,16 @@ export default function App() {
   const [region, setRegion] = useState('All regions');
   const [databaseStatus, setDatabaseStatus] = useState('Connect your PostgreSQL database to generate charts from SQL.');
   const [databaseInfo, setDatabaseInfo] = useState({ connected: false, schema: { tables: [] } });
+  const [importedDataset, setImportedDataset] = useState(null);
+  const [importStatus, setImportStatus] = useState('Import a CSV file or dataset link to start analyzing data.');
   const [dashboardKpis, setDashboardKpis] = useState(null);
+  const [builderState, setBuilderState] = useState(null);
+  const [pendingBuilderConfig, setPendingBuilderConfig] = useState(null);
   const profileMenuRef = useRef(null);
   const plan = mapPlanToUiPlan(user?.plan);
   const currentPlanId = user?.plan || 'trial';
   const isTrialPlan = currentPlanId === 'trial';
-  const hasDatasetLink = Boolean(databaseInfo?.connected);
+  const hasDatasetLink = Boolean(databaseInfo?.connected || importedDataset?.datasetId);
 
   const loadSavedDashboards = async () => {
     try {
@@ -168,7 +169,8 @@ export default function App() {
     category,
     region,
     useUserDb: Boolean(databaseInfo?.connected),
-  }), [dateRange, category, region, databaseInfo]);
+    datasetId: importedDataset?.datasetId || '',
+  }), [dateRange, category, region, databaseInfo, importedDataset]);
 
   useEffect(() => {
     if (!hasStarted) return;
@@ -179,6 +181,14 @@ export default function App() {
 
     const loadDashboardData = async () => {
       try {
+        if (importedDataset?.datasetId) {
+          const datasetKpis = await apiGet('/api/datasets/kpis', { datasetId: importedDataset.datasetId });
+          setDashboardKpis(datasetKpis?.kpis || null);
+          setDatabaseStatus(`Imported dataset ready. ${importedDataset.rowCount || 0} rows loaded.`);
+          setImportStatus(`CSV/Link imported successfully. ${importedDataset.rowCount || 0} rows available.`);
+          return;
+        }
+
         const datasetKpis = await apiGet('/api/db/kpis');
         setDashboardKpis(datasetKpis?.kpis || null);
       } catch (err) {
@@ -188,7 +198,7 @@ export default function App() {
     };
 
     loadDashboardData();
-  }, [hasStarted, activeFilters, hasDatasetLink]);
+  }, [hasStarted, activeFilters, hasDatasetLink, importedDataset]);
 
   useEffect(() => {
     if (plan === 'Free') return;
@@ -245,6 +255,8 @@ export default function App() {
     setDatabaseStatus('Connecting to database...');
     try {
       const result = await apiPost('/api/db/connect', { dbUrl });
+      setImportedDataset(null);
+      setImportStatus('Import a CSV file or dataset link to start analyzing data.');
       setDatabaseInfo(result || { connected: false, schema: { tables: [] } });
       const tableCount = result?.schema?.tables?.length || 0;
       setDatabaseStatus(`Connected successfully. ${tableCount} tables discovered.`);
@@ -266,18 +278,67 @@ export default function App() {
     }
   };
 
+  const handleDatasetImportFromUrl = async (url) => {
+    if (!url) {
+      setImportStatus('Please paste a CSV/Google Sheet link first.');
+      return;
+    }
+
+    setImportStatus('Importing dataset from link...');
+    try {
+      const result = await apiPost('/api/datasets/from-url', { url });
+      setImportedDataset(result || null);
+      setDatabaseInfo({ connected: false, schema: { tables: [] } });
+      setDashboardKpis(null);
+      setImportStatus(`Link imported successfully. ${result?.rowCount || 0} rows loaded.`);
+    } catch (err) {
+      setImportedDataset(null);
+      setImportStatus(err.message || 'Failed to import dataset from link.');
+    }
+  };
+
+  const handleDatasetImportFromCsv = async (csvText, fileName = 'dataset.csv') => {
+    if (!csvText) {
+      setImportStatus('Please choose a CSV file first.');
+      return;
+    }
+
+    setImportStatus(`Uploading ${fileName}...`);
+    try {
+      const result = await apiPost('/api/datasets/from-csv', { csvText, fileName });
+      setImportedDataset(result || null);
+      setDatabaseInfo({ connected: false, schema: { tables: [] } });
+      setDashboardKpis(null);
+      setImportStatus(`CSV uploaded successfully. ${result?.rowCount || 0} rows loaded.`);
+    } catch (err) {
+      setImportedDataset(null);
+      setImportStatus(err.message || 'Failed to import CSV.');
+    }
+  };
+
+  const handleClearImportedDataset = () => {
+    setImportedDataset(null);
+    setImportStatus('Import a CSV file or dataset link to start analyzing data.');
+    setDashboardKpis(null);
+  };
+
   const handleSaveDashboard = async () => {
-    if (!generations.length) {
-      alert('Generate at least one chart before saving.');
+    if (!builderState?.widgets?.length) {
+      alert('Generate dashboard in builder before saving.');
       return;
     }
 
     const config = {
+      version: 'builder-v1',
       filters: activeFilters,
-      charts: generations.slice(0, 8).map((item) => ({
-        type: item.tier === 'premium' ? 'premium' : 'standard',
-        query: item.query,
-      })),
+      builder: {
+        kpiPrompt: builderState.kpiPrompt || '',
+        selectedIds: builderState.selectedIds || [],
+        widgets: builderState.widgets || [],
+        generationNote: builderState.generationNote || '',
+        step: builderState.step || 'dashboard',
+        darkMode: Boolean(builderState.darkMode),
+      },
     };
 
     try {
@@ -289,23 +350,29 @@ export default function App() {
     }
   };
 
+  const handleBeforeBuilderGenerate = async () => {
+    try {
+      await apiPost('/api/usage/check-dashboard', {});
+      await loadUsage();
+      return true;
+    } catch (err) {
+      alert(err.message || 'Dashboard generation limit reached. Upgrade plan to continue.');
+      return false;
+    }
+  };
+
   const handleLoadDashboard = async (dashboard) => {
     try {
-      console.log('Loading dashboard:', dashboard);
-      
-      // Config can be either string or object
       let config = dashboard.config;
       if (typeof config === 'string') {
         try {
           config = JSON.parse(config);
-        } catch (e) {
-          console.warn('Failed to parse config string, treating as object');
+        } catch (_e) {
+          // Keep as-is and validate below.
         }
       }
-      
-      // If still not an object, try parsing dashboard object itself
+
       if (!config || typeof config !== 'object') {
-        console.log('Config is not object, trying to parse dashboard');
         config = typeof dashboard === 'string' ? JSON.parse(dashboard) : dashboard;
         if (config.config) {
           if (typeof config.config === 'string') {
@@ -315,52 +382,21 @@ export default function App() {
           }
         }
       }
-      
-      console.log('Final config:', config);
-      
+
       if (!config || typeof config !== 'object') {
         throw new Error('Invalid dashboard configuration format');
       }
-      
-      // Restore charts/generations from saved config
-      const chartList = config.charts || [];
-      console.log('Restoring charts:', chartList);
-      
-      if (chartList.length === 0) {
-        alert('Dashboard has no charts to restore.');
+
+      if (!config.builder) {
+        alert('This saved dashboard is from old single-chart flow. Use a builder-based saved dashboard.');
         return;
       }
-      
-      const restoredCharts = chartList.map((chart, idx) => {
-        if (!chart.query) {
-          console.warn('Chart missing query:', chart);
-          return null;
-        }
-        return {
-          id: Date.now() + idx,
-          query: chart.query,
-          tier: chart.type === 'premium' ? 'premium' : 'standard',
-          isOpen: true,
-        };
-      }).filter(Boolean);
-      
-      if (restoredCharts.length === 0) {
-        alert('No valid charts found in dashboard.');
-        return;
-      }
-      
-      setGenerations(restoredCharts);
-      setActiveNav('reports');
-      
-      // Scroll to reports section
-      setTimeout(() => {
-        const reportsSection = document.getElementById('reports');
-        reportsSection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 300);
-      
-      alert(`Dashboard loaded with ${restoredCharts.length} charts.`);
+
+      setPendingBuilderConfig(config.builder);
+      setActiveScreen('custom-dashboard-builder');
+      setActiveNav('dashboard');
+      alert('Builder dashboard loaded.');
     } catch (err) {
-      console.error('Failed to load dashboard:', err, dashboard);
       alert(`Failed to load dashboard: ${err.message}`);
     }
   };
@@ -379,10 +415,15 @@ export default function App() {
     setUsage(null);
     setSavedDashboards([]);
     setGenerations([]);
+    setBuilderState(null);
+    setPendingBuilderConfig(null);
     setIsChatOpen(false);
     setIsProfileMenuOpen(false);
     setDatabaseInfo({ connected: false, schema: { tables: [] } });
     setDatabaseStatus('Connect your PostgreSQL database to generate charts from SQL.');
+    setImportStatus('Import a CSV file or dataset link to start analyzing data.');
+    setImportedDataset(null);
+    setDashboardKpis(null);
     setAuthMode('login');
   };
 
@@ -461,11 +502,6 @@ export default function App() {
       setIsChatOpen(true);
       return;
     }
-
-    setTimeout(() => {
-      const target = document.getElementById(next);
-      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 80);
   };
 
   useEffect(() => {
@@ -523,7 +559,7 @@ export default function App() {
       <div className="app-main-column">
         <header className="top-navbar">
           <div>
-            <h1 className="page-title">{activeScreen === 'pricing' ? 'Subscription Plans' : 'Dashboard'}</h1>
+            <h1 className="page-title">{activeScreen === 'pricing' ? 'Subscription Plans' : activeScreen === 'custom-dashboard-builder' ? 'Dashboard Builder' : 'Dashboard'}</h1>
             <p className="page-subtitle">Talking BI enterprise workspace</p>
           </div>
 
@@ -613,20 +649,19 @@ export default function App() {
                       const result = await apiPost('/api/subscription/plan', { plan: targetPlan });
                       setUser(result?.user || user);
                       await loadUsage();
-                      setActiveScreen('dashboard');
+                      setActiveScreen('custom-dashboard-builder');
                     } catch (err) {
                       alert(err.message || 'Unable to update plan.');
                     }
                   }}
                 />
               </motion.div>
-            ) : (
+            ) : activeScreen === 'custom-dashboard-builder' ? (
               <motion.div
-                key="dashboard"
+                key="custom-dashboard-builder"
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
-                className="dashboard-layout"
               >
                 <section className="filters-row">
                   <div className="filter-title">
@@ -665,48 +700,25 @@ export default function App() {
                       <option>Rajasthan</option>
                     </select>
                   </label>
-
-                  <div className="view-mode-toggle" role="group" aria-label="Graph visual mode">
-                    <button
-                      type="button"
-                      className={`view-mode-btn ${visualMode === 'free' ? 'active' : ''}`}
-                      onClick={() => setVisualMode('free')}
-                    >
-                      Free View
-                    </button>
-                    <button
-                      type="button"
-                      className={`view-mode-btn premium ${visualMode === 'premium' ? 'active' : ''}`}
-                      onClick={() => setVisualMode('premium')}
-                    >
-                      Premium View
-                    </button>
-                  </div>
                 </section>
 
-                {hasDatasetLink ? (
-                  <section className="kpi-grid">
-                    {kpiCards.map((kpi) => (
-                      <article className="kpi-card" key={kpi.label}>
-                        <p className="kpi-label">{kpi.label}</p>
-                        <p className="kpi-value">{kpi.value}</p>
-                      </article>
-                    ))}
-                  </section>
-                ) : (
-                  <section className="query-card">
-                    <p>Connect your database URL to unlock KPI cards and AI insights.</p>
-                  </section>
-                )}
-
-                <section className="query-card" id="dashboard">
+                <section className="query-card" style={{ marginBottom: '14px' }}>
                   <SearchInterface
-                    onQuerySubmit={handleQuerySubmit}
+                    showQuery={false}
+                    onQuerySubmit={() => {}}
                     onDatabaseConnect={handleDatabaseConnect}
                     onDatabaseDisconnect={handleDatabaseDisconnect}
+                    onDatasetImportFromUrl={handleDatasetImportFromUrl}
+                    onDatasetImportFromCsv={handleDatasetImportFromCsv}
+                    onClearImportedDataset={handleClearImportedDataset}
                     isDatabaseConnected={Boolean(databaseInfo?.connected)}
                     databaseStatus={databaseStatus}
+                    importedDataset={importedDataset}
+                    importStatus={importStatus}
                   />
+                </section>
+
+                <section className="query-card" style={{ marginBottom: '14px' }}>
                   <div className="dashboard-action-row">
                     {PLAN_STORAGE_CONFIG[currentPlanId]?.enabled ? (
                       <button type="button" className="btn-primary" onClick={handleSaveDashboard}>
@@ -718,78 +730,20 @@ export default function App() {
                       </span>
                     )}
                     {databaseInfo?.connected ? <span className="dataset-pill">Database connected</span> : null}
+                    {importedDataset?.datasetId ? <span className="dataset-pill">Dataset imported</span> : null}
                   </div>
                 </section>
 
-                <div className="content-split-grid">
-                  <section className="charts-section" id="reports">
-                    <div className="section-header">
-                      <h2>Reports</h2>
-                      <span>{visibleGenerations.length} generated</span>
-                    </div>
+                <div className="content-split-grid" style={{ gridTemplateColumns: 'minmax(0,1fr) 300px' }}>
+                  <CustomDashboardBuilder
+                    filters={activeFilters}
+                    initialConfig={pendingBuilderConfig}
+                    onStateChange={setBuilderState}
+                    onBeforeGenerate={handleBeforeBuilderGenerate}
+                    currentPlanId={currentPlanId}
+                  />
 
-                    {visibleGenerations.length > 0 ? (
-                      <div className="charts-stack">
-                        {visibleGenerations.map((gen) => (
-                          <article className={`chart-wrapper graph-view-${visualMode} ${gen.tier === 'premium' ? 'premium-card-shell' : ''}`} key={gen.id}>
-                            <div className="chart-wrapper-header">
-                              <div className="chart-wrapper-title-group">
-                                <h3>{gen.query}</h3>
-                                <div className="chart-meta-row">
-                                  <span className="chart-meta-chip">Generated analysis</span>
-                                  <span className={`chart-meta-chip tier-${gen.tier}`}>{gen.tier === 'premium' ? '[PREMIUM]' : '[FREE]'}</span>
-                                  <span className={`chart-meta-chip ${gen.isLockedByPlan ? 'status-locked' : 'status-open'}`}>
-                                    {gen.isLockedByPlan ? 'Locked' : gen.isOpen ? 'Open' : 'Collapsed'}
-                                  </span>
-                                </div>
-                              </div>
-
-                              <div className="chart-wrapper-actions">
-                                {!gen.isLockedByPlan ? (
-                                  <button
-                                    type="button"
-                                    className="chart-toggle-btn"
-                                    onClick={() => toggleGenerationOpen(gen.id)}
-                                  >
-                                    {gen.isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                                    {gen.isOpen ? 'Collapse' : 'Open'}
-                                  </button>
-                                ) : (
-                                  <span className="chart-locked-badge">
-                                    <Lock size={12} /> Unlock in premium
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <GeneratedChart
-                              query={gen.query}
-                              plan={plan}
-                              onFollowup={handleQuerySubmit}
-                              filters={activeFilters}
-                              tier={gen.tier}
-                              isOpen={gen.isOpen}
-                              isLocked={gen.isLockedByPlan}
-                              visualMode={visualMode}
-                            />
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="empty-state">
-                        <p>{generations.length > 0 ? 'No matching reports. Try another search.' : 'No data available. Please run a query.'}</p>
-                      </div>
-                    )}
-                  </section>
-
-                  <aside id="insights">
-                    {hasDatasetLink ? (
-                      <InsightPanel filters={activeFilters} />
-                    ) : (
-                      <section className="saved-dashboards-panel">
-                        <h3>AI Insights</h3>
-                        <p>AI insights appear after a valid database connection is established.</p>
-                      </section>
-                    )}
+                  <aside>
                     <section className="saved-dashboards-panel">
                       <h3>Saved Dashboards</h3>
                       {savedDashboards.length ? (
@@ -801,54 +755,46 @@ export default function App() {
                             const daysLeft = expires ? Math.ceil((expires - now) / (1000 * 60 * 60 * 24)) : null;
                             const isExpiringSoon = daysLeft !== null && daysLeft <= 7 && daysLeft > 0;
                             const isExpired = daysLeft !== null && daysLeft <= 0;
-                            
                             return (
-                              <li 
+                              <li
                                 key={item.id}
                                 onClick={() => !isExpired && handleLoadDashboard(item)}
                                 style={{
                                   padding: '10px 12px',
                                   margin: '6px 0',
                                   backgroundColor: isExpired ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)',
-                                  border: `1px solid ${isExpired ? 'rgba(239, 68, 68, 0.3)' : isExpiringSoon ? 'rgba(245, 158, 11, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`,
+                                  border: `1px solid ${isExpired ? 'rgba(239, 68, 68, 0.3)' : isExpiringSoon ? 'rgba(245, 158, 11, 0.35)' : 'rgba(59, 130, 246, 0.3)'}`,
                                   borderRadius: '6px',
                                   cursor: isExpired ? 'not-allowed' : 'pointer',
                                   transition: 'all 0.2s ease',
                                   fontSize: '12px',
-                                  color: isExpired ? '#f87171' : '#e5e7eb',
-                                  opacity: isExpired ? 0.6 : 1,
+                                  color: isExpired ? '#fca5a5' : '#e5e7eb',
+                                  opacity: isExpired ? 0.7 : 1,
                                 }}
                                 onMouseEnter={(e) => {
-                                  if (!isExpired) {
-                                    e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.2)';
-                                    e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.5)';
-                                    e.currentTarget.style.transform = 'translateX(4px)';
-                                  }
+                                  if (isExpired) return;
+                                  e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.2)';
+                                  e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.5)';
+                                  e.currentTarget.style.transform = 'translateX(4px)';
                                 }}
                                 onMouseLeave={(e) => {
-                                  if (!isExpired) {
-                                    e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
-                                    e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
-                                    e.currentTarget.style.transform = 'translateX(0)';
-                                  }
+                                  if (isExpired) return;
+                                  e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
+                                  e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+                                  e.currentTarget.style.transform = 'translateX(0)';
                                 }}
                               >
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <span>{isExpired ? '🗑️' : '📊'} {saved.toLocaleDateString()}</span>
-                                  <span style={{ fontSize: '11px', opacity: 0.7 }}>
-                                    {daysLeft === null ? '♾️ Forever' : daysLeft > 0 ? `${daysLeft}d left` : 'Expired'}
+                                  <span>📊 {saved.toLocaleDateString()}</span>
+                                  <span style={{ fontSize: '11px', opacity: 0.8 }}>
+                                    {daysLeft === null ? 'Forever' : daysLeft > 0 ? `${daysLeft}d left` : 'Expired'}
                                   </span>
                                 </div>
-                                {daysLeft !== null && (
-                                  <div style={{ fontSize: '11px', marginTop: '4px', opacity: 0.6 }}>
-                                    Expires: {expires?.toLocaleDateString()}
+                                {expires ? (
+                                  <div style={{ marginTop: '4px', fontSize: '11px', opacity: 0.75 }}>
+                                    Expires: {expires.toLocaleDateString()}
                                   </div>
-                                )}
-                                {isExpired && (
-                                  <div style={{ fontSize: '11px', color: '#f87171', marginTop: '4px' }}>
-                                    This dashboard has expired
-                                  </div>
-                                )}
+                                ) : null}
                               </li>
                             );
                           })}
@@ -859,6 +805,16 @@ export default function App() {
                     </section>
                   </aside>
                 </div>
+              </motion.div>
+            ) : (
+              <motion.div key="default-builder-fallback" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                <CustomDashboardBuilder
+                  filters={activeFilters}
+                  initialConfig={pendingBuilderConfig}
+                  onStateChange={setBuilderState}
+                  onBeforeGenerate={handleBeforeBuilderGenerate}
+                  currentPlanId={currentPlanId}
+                />
               </motion.div>
             )}
           </AnimatePresence>

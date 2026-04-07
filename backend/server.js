@@ -1289,8 +1289,9 @@ RESPOND WITH ONLY THE SQL QUERY, NO EXPLANATION.`;
 // ENHANCED CHATBOT API
 // ==========================================
 app.post('/api/chat', async (req, res) => {
-    const { query, filters = {}, sessionId, usageType = 'chat' } = req.body;
+    const { query, filters = {}, sessionId, usageType = 'chat', generationId } = req.body;
     const lowerQuery = (query || '').toLowerCase().trim();
+    const datasetId = String(filters?.datasetId || '').trim();
 
     if (!lowerQuery) {
         return res.json({ answer: "Please type a question about your data.", sql: "", data: [], chartType: null, insights: [] });
@@ -1302,7 +1303,52 @@ app.post('/api/chat', async (req, res) => {
 
     try {
         const normalizedUsageType = usageType === 'dashboard_generation' ? 'dashboard_generation' : 'chat';
-        await applyUsagePolicy(req.user, normalizedUsageType);
+        await applyUsagePolicy(req.user, normalizedUsageType, { generationId });
+
+        if (datasetId) {
+            const datasetAnalytics = getDatasetAnalytics(datasetId, req.user, lowerQuery);
+            if (datasetAnalytics) {
+                return res.json({
+                    answer: datasetAnalytics.answer,
+                    sql: '',
+                    data: datasetAnalytics.data,
+                    chartType: datasetAnalytics.chartType,
+                    parsedQuery: { source: 'dataset_url' },
+                    insights: datasetAnalytics.insights,
+                    provider: 'dataset-engine',
+                });
+            }
+        }
+
+        // For chat conversations, always send the user's message to the LLM first.
+        if (normalizedUsageType === 'chat') {
+            const session = getSession(sessionId);
+            const parsed = parseQuery(lowerQuery, session.context);
+
+            Object.keys(parsed).forEach((k) => {
+                if (parsed[k] !== undefined) session.context[k] = parsed[k];
+            });
+
+            const defaultAnswer = 'I understood your question. Please share more context if you want a deeper data-focused answer.';
+            const llmResponse = await maybeGroqAnswer({
+                query: lowerQuery,
+                parsed,
+                data: [],
+                insights: [],
+                defaultAnswer,
+                isOpenEnded: true,
+            });
+
+            return res.json({
+                answer: llmResponse.answer,
+                sql: '',
+                data: [],
+                chartType: null,
+                parsedQuery: parsed,
+                insights: [],
+                provider: llmResponse.provider,
+            });
+        }
 
         const userDbAnalytics = await getUserDbAnalytics(req.user, lowerQuery, filters);
         if (userDbAnalytics) {
