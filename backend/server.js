@@ -11,6 +11,9 @@ const port = process.env.PORT || 3001;
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
 
+app.get("/ping", (req, res) => {
+    res.json({ status: "alive" });
+});
 app.use(cors());
 app.use(express.json());
 app.use(optionalAuth);
