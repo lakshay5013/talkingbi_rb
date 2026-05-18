@@ -414,11 +414,17 @@ export default function CustomDashboardBuilder({
   }, [step, kpiPrompt, selectedIds, widgets, generationNote, darkMode, dashboardMode, onStateChange]);
 
   return (
-    <div className={`rounded-2xl border p-4 md:p-6 ${darkMode ? 'border-slate-700 bg-slate-950 text-slate-100' : 'border-slate-200 bg-white text-slate-900'}`}>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div
+      className="rounded-[24px] border border-[#E5E7EB] bg-white p-6 text-[#111827] md:p-8"
+      style={{
+        fontFamily: 'Inter, "Segoe UI", sans-serif',
+        boxShadow: '0 10px 30px rgba(37,99,235,0.08)',
+      }}
+    >
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold">Custom Dashboard Builder</h2>
-          <p className={`text-sm ${darkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+          <h2 className="text-[30px] font-bold tracking-[-0.02em] text-[#111827]">Custom Dashboard Builder</h2>
+          <p className="mt-1 text-sm font-medium text-[#6B7280]">
             Enter KPI requirements and generate one graph per KPI in a unified dashboard.
           </p>
         </div>
@@ -426,23 +432,23 @@ export default function CustomDashboardBuilder({
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium ${darkMode ? 'border-slate-600 bg-slate-900 hover:bg-slate-800' : 'border-slate-300 bg-slate-50 hover:bg-slate-100'}`}
+            className="inline-flex items-center gap-2 rounded-full border border-[#DBEAFE] bg-[#EFF6FF] px-4 py-2 text-sm font-semibold text-[#1D4ED8] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#DBEAFE]"
             onClick={() => setDarkMode((prev) => !prev)}
           >
             {darkMode ? <Sun size={15} /> : <Moon size={15} />} {darkMode ? 'Light' : 'Dark'} Mode
           </button>
-          <div className={`rounded-full px-3 py-2 text-xs font-medium ${darkMode ? 'bg-slate-900 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+          <div className="rounded-full border border-[#E5E7EB] bg-white px-4 py-2 text-xs font-semibold text-[#6B7280] shadow-[0_1px_2px_rgba(17,24,39,0.06)]">
             {selectedCount} charts selected
           </div>
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3">
-        <div className="text-sm font-semibold text-slate-100">Dashboard Mode</div>
+      <div className="mb-5 flex flex-wrap items-center gap-3 rounded-[16px] border border-[#E5E7EB] bg-[#F8FAFC] px-4 py-3">
+        <div className="text-sm font-semibold text-[#111827]">Dashboard Mode</div>
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${dashboardMode === 'standard' ? 'bg-slate-100 text-slate-900' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+            className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all duration-300 ${dashboardMode === 'standard' ? 'border-[#2563EB] bg-[#2563EB] text-white shadow-[0_6px_18px_rgba(37,99,235,0.25)]' : 'border-[#E5E7EB] bg-white text-[#374151] hover:-translate-y-0.5 hover:border-[#BFDBFE] hover:shadow-[0_8px_20px_rgba(37,99,235,0.12)]'}`}
             onClick={() => setDashboardMode('standard')}
           >
             Standard
@@ -450,13 +456,13 @@ export default function CustomDashboardBuilder({
           <button
             type="button"
             disabled={!isPremiumAllowed}
-            className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${dashboardMode === 'premium' ? 'bg-amber-500 text-slate-950' : isPremiumAllowed ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'cursor-not-allowed bg-slate-800 text-slate-500'}`}
+            className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all duration-300 ${dashboardMode === 'premium' ? 'border-[#2563EB] bg-[#2563EB] text-white shadow-[0_6px_18px_rgba(37,99,235,0.25)]' : isPremiumAllowed ? 'border-[#E5E7EB] bg-white text-[#374151] hover:-translate-y-0.5 hover:border-[#BFDBFE] hover:shadow-[0_8px_20px_rgba(37,99,235,0.12)]' : 'cursor-not-allowed border-[#E5E7EB] bg-[#F9FAFB] text-[#9CA3AF]'}`}
             onClick={() => isPremiumAllowed && setDashboardMode('premium')}
           >
             Premium Dashboard
           </button>
           {!isPremiumAllowed ? (
-            <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-300">
+            <span className="rounded-full border border-[#BFDBFE] bg-[#EFF6FF] px-3 py-1 text-xs font-semibold text-[#2563EB]">
               Locked for current plan
             </span>
           ) : null}
@@ -470,10 +476,10 @@ export default function CustomDashboardBuilder({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className={`rounded-xl border p-10 text-center ${darkMode ? 'border-slate-700 bg-slate-900/70' : 'border-slate-200 bg-slate-100'}`}
+            className="rounded-2xl border border-[#DBEAFE] bg-[#F8FBFF] p-10 text-center"
           >
             <Loader2 className="mx-auto mb-3 animate-spin text-blue-500" size={28} />
-            <p className="text-sm">Generating dashboard layout...</p>
+            <p className="text-sm font-medium text-[#6B7280]">Generating dashboard layout...</p>
           </motion.div>
         ) : step === 'select' ? (
           <motion.div key="selector" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>

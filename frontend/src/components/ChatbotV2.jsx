@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, Send, Bot, User, Sparkles, ChevronRight } from 'lucide-react';
 import { apiPost } from '../api';
@@ -6,41 +6,41 @@ import { apiPost } from '../api';
 const FREE_QUEUE_MIN_SEC = 10;
 const FREE_QUEUE_MAX_SEC = 15;
 
-export default function ChatbotV2({ isOpen, onClose, plan, filters, onUsageRefresh }) {
+export default function ChatbotV2({
+  isOpen,
+  onClose,
+  plan,
+  filters,
+  onUsageRefresh,
+  queuedPrompt = '',
+  onQueuedPromptConsumed,
+}) {
   const [messages, setMessages] = useState([
-    { role: 'assistant', text: "Systems online. I'm ready to analyze your datasets. Try asking follow-up questions — I'll remember context!", id: 1 }
+    { role: 'assistant', text: "Systems online. I'm ready to analyze your datasets. Try asking follow-up questions — I'll remember context!", id: 1 },
   ]);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isQueued, setIsQueued] = useState(false);
   const [queueSecondsLeft, setQueueSecondsLeft] = useState(0);
+
   const sessionIdRef = useRef(`session_${Date.now()}_${Math.random().toString(36).slice(2)}`);
   const queueIntervalRef = useRef(null);
   const speakTimeoutRef = useRef(null);
   const activeUtteranceRef = useRef(null);
   const recognitionRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const lastQueuedPromptRef = useRef('');
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  useEffect(() => {
-    return () => {
-      if (queueIntervalRef.current) {
-        clearInterval(queueIntervalRef.current);
-      }
-      if (speakTimeoutRef.current) {
-        clearTimeout(speakTimeoutRef.current);
-      }
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-    };
+  useEffect(() => () => {
+    if (queueIntervalRef.current) clearInterval(queueIntervalRef.current);
+    if (speakTimeoutRef.current) clearTimeout(speakTimeoutRef.current);
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    if (recognitionRef.current) recognitionRef.current.stop();
   }, []);
 
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -75,32 +75,26 @@ export default function ChatbotV2({ isOpen, onClose, plan, filters, onUsageRefre
 
       const voices = window.speechSynthesis.getVoices?.() || [];
       const preferredVoice = voices.find((voice) => /en[-_]?IN|en[-_]?US|en[-_]?GB/i.test(voice.lang || '')) || voices[0];
-      if (preferredVoice) {
-        utter.voice = preferredVoice;
-      }
+      if (preferredVoice) utter.voice = preferredVoice;
 
       utter.onend = () => {
-        if (activeUtteranceRef.current === utter) {
-          activeUtteranceRef.current = null;
-        }
+        if (activeUtteranceRef.current === utter) activeUtteranceRef.current = null;
       };
 
       utter.onerror = () => {
-        if (activeUtteranceRef.current === utter) {
-          activeUtteranceRef.current = null;
-        }
+        if (activeUtteranceRef.current === utter) activeUtteranceRef.current = null;
       };
 
       window.speechSynthesis.speak(utter);
     }, 80);
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || isTyping || isQueued) return;
-    
-    const userMsg = input;
-    setMessages(prev => [...prev, { role: 'user', text: userMsg, id: Date.now() }]);
-    setInput("");
+  const sendPrompt = async (promptText) => {
+    if (!String(promptText || '').trim() || isTyping || isQueued) return;
+
+    const userMsg = String(promptText).trim();
+    setMessages((prev) => [...prev, { role: 'user', text: userMsg, id: Date.now() }]);
+    setInput('');
     setIsTyping(true);
 
     try {
@@ -126,18 +120,16 @@ export default function ChatbotV2({ isOpen, onClose, plan, filters, onUsageRefre
         queueIntervalRef.current = setInterval(() => {
           remaining = Math.max(remaining - 1, 0);
           setQueueSecondsLeft(remaining);
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === queueMessageId
-                ? {
-                    ...msg,
-                    text: remaining > 0
-                      ? `Free queue active. Generating in ~${remaining}s...`
-                      : 'Queue cleared. Generating response...',
-                  }
-                : msg
-            )
-          );
+          setMessages((prev) => prev.map((msg) => (
+            msg.id === queueMessageId
+              ? {
+                ...msg,
+                text: remaining > 0
+                  ? `Free queue active. Generating in ~${remaining}s...`
+                  : 'Queue cleared. Generating response...',
+              }
+              : msg
+          )));
         }, 1000);
 
         await wait(queueDelaySec * 1000);
@@ -158,26 +150,22 @@ export default function ChatbotV2({ isOpen, onClose, plan, filters, onUsageRefre
         usageType: 'chat',
       });
 
-      if (typeof onUsageRefresh === 'function') {
-        onUsageRefresh();
-      }
+      if (typeof onUsageRefresh === 'function') onUsageRefresh();
 
       const reply = response?.answer || 'I could not generate a response for that query.';
       const insights = response?.insights || [];
 
       setIsTyping(false);
-
-      // Main answer
-      setMessages(prev => [...prev, {
+      setMessages((prev) => [...prev, {
         role: 'assistant',
         text: reply,
         id: Date.now() + 1,
         insights,
         parsedQuery: response?.parsedQuery,
       }]);
-      
+
       speakReply(reply);
-    } catch (err) {
+    } catch (_err) {
       if (queueIntervalRef.current) {
         clearInterval(queueIntervalRef.current);
         queueIntervalRef.current = null;
@@ -185,16 +173,32 @@ export default function ChatbotV2({ isOpen, onClose, plan, filters, onUsageRefre
       setQueueSecondsLeft(0);
       setIsQueued(false);
       setIsTyping(false);
-      setMessages(prev => [
+      setMessages((prev) => [
         ...prev,
         { role: 'assistant', text: 'Backend is unavailable. Please try again in a moment.', id: Date.now() + 1 },
       ]);
     }
   };
 
+  const handleSend = async () => {
+    await sendPrompt(input);
+  };
+
+  useEffect(() => {
+    const prompt = String(queuedPrompt || '').trim();
+    if (!isOpen || !prompt || prompt === lastQueuedPromptRef.current) return;
+
+    lastQueuedPromptRef.current = prompt;
+    const timer = setTimeout(() => {
+      sendPrompt(prompt);
+      if (typeof onQueuedPromptConsumed === 'function') onQueuedPromptConsumed();
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [queuedPrompt, isOpen]);
+
   const startVoice = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
     if (!SpeechRecognition) {
       setInput((prev) => prev || 'What was the total revenue?');
       return;
@@ -213,9 +217,7 @@ export default function ChatbotV2({ isOpen, onClose, plan, filters, onUsageRefre
     recognition.onstart = () => setIsListening(true);
     recognition.onresult = (event) => {
       const transcript = event.results?.[0]?.[0]?.transcript?.trim();
-      if (transcript) {
-        setInput(transcript);
-      }
+      if (transcript) setInput(transcript);
     };
     recognition.onerror = () => setIsListening(false);
     recognition.onend = () => {
@@ -230,7 +232,7 @@ export default function ChatbotV2({ isOpen, onClose, plan, filters, onUsageRefre
   return (
     <AnimatePresence>
       {isOpen && (
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, x: 40 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 40 }}
@@ -240,22 +242,22 @@ export default function ChatbotV2({ isOpen, onClose, plan, filters, onUsageRefre
           <div className="chat-header">
             <div className="chat-header-left">
               <div className="chat-avatar">
-                 <Bot className="w-4 h-4" />
+                <Bot className="w-4 h-4" />
               </div>
               <div>
-                <h3>Talking BI Assistant <Sparkles className="w-3 h-3"/></h3>
+                <h3>Talking BI Assistant <Sparkles className="w-3 h-3" /></h3>
                 <p>{plan} plan · Context-aware</p>
               </div>
             </div>
             <button onClick={onClose} className="icon-btn" aria-label="Close chat">
-               &times;
+              &times;
             </button>
           </div>
 
           <div className="chat-messages">
             <AnimatePresence>
-              {messages.map(m => (
-                <motion.div 
+              {messages.map((m) => (
+                <motion.div
                   key={m.id}
                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -266,7 +268,6 @@ export default function ChatbotV2({ isOpen, onClose, plan, filters, onUsageRefre
                   </div>
                   <div className={`chat-bubble ${m.role === 'user' ? 'user' : 'assistant'} ${m.isQueueStatus ? 'queue-status' : ''}`}>
                     {m.text}
-                    {/* Show inline insights if available */}
                     {m.insights && m.insights.length > 0 && (
                       <div className="chat-inline-insights">
                         {m.insights.map((ins, i) => (
@@ -294,9 +295,9 @@ export default function ChatbotV2({ isOpen, onClose, plan, filters, onUsageRefre
 
             {isTyping && !isQueued && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="typing-indicator">
-                <span className="typing-dot"></span>
-                <span className="typing-dot delay-1"></span>
-                <span className="typing-dot delay-2"></span>
+                <span className="typing-dot" />
+                <span className="typing-dot delay-1" />
+                <span className="typing-dot delay-2" />
               </motion.div>
             )}
             <div ref={messagesEndRef} />
@@ -305,26 +306,26 @@ export default function ChatbotV2({ isOpen, onClose, plan, filters, onUsageRefre
           <div className="chat-input-area">
             {isListening && (
               <div className="chat-listening-pulse">
-                <span className="wave-bar"></span>
-                <span className="wave-bar delay-1"></span>
-                <span className="wave-bar delay-2"></span>
+                <span className="wave-bar" />
+                <span className="wave-bar delay-1" />
+                <span className="wave-bar delay-2" />
               </div>
             )}
             <div className="chat-input-wrap">
-               <input 
-                 value={input}
-                 onChange={e=>setInput(e.target.value)}
-                 onKeyDown={e=>e.key==='Enter'&&handleSend()}
-                 placeholder={isQueued ? 'Free queue in progress...' : 'Ask a question (I remember context)'}
-                 className="chat-input"
-                 disabled={isTyping || isQueued}
-               />
-               <button onClick={startVoice} className={`icon-btn ${isListening ? 'listening' : ''}`} aria-label="Start voice" disabled={isTyping || isQueued}>
-                 <Mic className="w-4 h-4" />
-               </button>
-               <button onClick={handleSend} className="btn-primary" aria-label="Send message" disabled={isTyping || isQueued}>
-                 <Send className="w-4 h-4" />
-               </button>
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                placeholder={isQueued ? 'Free queue in progress...' : 'Ask a question (I remember context)'}
+                className="chat-input"
+                disabled={isTyping || isQueued}
+              />
+              <button onClick={startVoice} className={`icon-btn ${isListening ? 'listening' : ''}`} aria-label="Start voice" disabled={isTyping || isQueued}>
+                <Mic className="w-4 h-4" />
+              </button>
+              <button onClick={handleSend} className="btn-primary" aria-label="Send message" disabled={isTyping || isQueued}>
+                <Send className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </motion.div>

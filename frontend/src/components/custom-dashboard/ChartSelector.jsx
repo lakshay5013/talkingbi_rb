@@ -225,19 +225,19 @@ export default function ChartSelector({
   hasParsedKpis,
 }) {
   return (
-    <section className="rounded-2xl border border-slate-700 bg-slate-950 p-5 shadow-[0_12px_36px_rgba(2,6,23,0.45)]">
-      <div className="mb-5 rounded-xl border border-slate-700 bg-slate-900/60 p-4">
-        <h3 className="text-lg font-semibold text-slate-100">Step 1: Tell KPI Requirement</h3>
-        <p className="mt-1 text-sm text-slate-400">Graph type will be auto-selected based on each KPI, and you can change it later using toggles on dashboard cards.</p>
+    <section className="rounded-2xl bg-transparent p-0">
+      <div className="mb-6 rounded-[20px] border border-[#BFDBFE] bg-[rgba(219,234,254,0.25)] p-5 md:p-6">
+        <h3 className="text-xl font-bold tracking-[-0.01em] text-[#111827]">Step 1: Tell KPI Requirement</h3>
+        <p className="mt-1.5 text-sm text-[#6B7280]">Graph type will be auto-selected based on each KPI, and you can change it later using toggles on dashboard cards.</p>
 
-        <div className="mt-3 flex flex-col gap-3">
+        <div className="mt-4 flex flex-col gap-3">
           <textarea
             value={kpiPrompt}
             onChange={(event) => onKpiPromptChange(event.target.value)}
-            className="min-h-[82px] w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-blue-500"
+            className="min-h-[104px] w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm text-[#111827] shadow-[0_1px_2px_rgba(17,24,39,0.05)] outline-none transition-all duration-300 placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-4 focus:ring-[rgba(37,99,235,0.16)]"
             placeholder="Enter KPI goals..."
           />
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
               type="text"
               value={manualKpiInput || ''}
@@ -248,13 +248,13 @@ export default function ChartSelector({
                   onAddKpi?.();
                 }
               }}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-blue-500"
+              className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm text-[#111827] shadow-[0_1px_2px_rgba(17,24,39,0.05)] outline-none transition-all duration-300 placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-4 focus:ring-[rgba(37,99,235,0.16)]"
               placeholder="Add KPI manually (e.g. Profit by State)"
             />
             <button
               type="button"
               onClick={onAddKpi}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+              className="inline-flex min-h-[46px] items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#2563EB,#3B82F6)] px-5 py-2 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(37,99,235,0.25)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_26px_rgba(37,99,235,0.34)]"
             >
               <Plus size={14} /> Add KPI
             </button>
@@ -263,11 +263,11 @@ export default function ChartSelector({
             <button
               type="button"
               onClick={onParseKpis}
-              className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-700"
+              className="rounded-xl border border-[#2563EB] bg-white px-4 py-2 text-sm font-semibold text-[#2563EB] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#EFF6FF]"
             >
               Analyze KPI
             </button>
-            <span className={`text-xs ${hasParsedKpis ? 'text-emerald-400' : 'text-amber-400'}`}>
+            <span className={`text-xs font-semibold ${hasParsedKpis ? 'text-[#2563EB]' : 'text-[#6B7280]'}`}>
               {hasParsedKpis ? 'KPI analyzed' : 'You can generate directly too'}
             </span>
           </div>
@@ -278,12 +278,12 @@ export default function ChartSelector({
             {parsedKpis.map((item) => (
               <span
                 key={item.id}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-600 bg-slate-950 px-3 py-1 text-xs text-slate-300"
+                className="inline-flex items-center gap-2 rounded-full border border-[#BFDBFE] bg-white px-3 py-1.5 text-xs font-medium text-[#1D4ED8] shadow-[0_1px_2px_rgba(17,24,39,0.04)]"
               >
                 {item.name}
                 <button
                   type="button"
-                  className="rounded-full p-0.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                  className="rounded-full p-0.5 text-[#6B7280] transition hover:bg-[#EFF6FF] hover:text-[#2563EB]"
                   onClick={() => onRemoveKpi?.(item.id)}
                   aria-label={`Remove ${item.name}`}
                 >
@@ -295,10 +295,10 @@ export default function ChartSelector({
         ) : null}
       </div>
 
-      <div className="mt-4 flex justify-end">
+      <div className="mt-5 flex justify-end">
         <button
           type="button"
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+          className="inline-flex min-h-[48px] items-center rounded-xl bg-[linear-gradient(135deg,#2563EB,#3B82F6)] px-6 py-2 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.28)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(37,99,235,0.36)]"
           onClick={onGenerate}
         >
           Generate Dashboard

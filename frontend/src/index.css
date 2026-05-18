@@ -1704,15 +1704,16 @@ button {
    ========================================== */
 
 .insight-panel-v2 {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1px solid #e5e7eb;
+  border-radius: 24px;
   background: #ffffff;
-  padding: 14px;
+  padding: 20px;
   display: grid;
-  gap: 12px;
+  gap: 16px;
   min-width: 0;
   overflow: hidden;
   max-width: 100%;
+  box-shadow: 0 10px 30px rgba(37, 99, 235, 0.08);
 }
 
 /* Data Quality Badge */
@@ -1720,13 +1721,13 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  border: 1px solid #d1fae5;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #ecfdf5, #f0fdf4);
+  padding: 10px 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 16px;
+  background: rgba(219, 234, 254, 0.25);
   font-size: 12px;
   font-weight: 600;
-  color: #065f46;
+  color: #1d4ed8;
   min-width: 0;
   flex-wrap: wrap;
 }
@@ -1734,14 +1735,14 @@ button {
 .quality-bar {
   flex: 1;
   height: 6px;
-  background: #d1fae5;
+  background: #dbeafe;
   border-radius: 999px;
   overflow: hidden;
 }
 
 .quality-fill {
   height: 100%;
-  background: linear-gradient(90deg, #10b981, #059669);
+  background: linear-gradient(90deg, #2563eb, #3b82f6);
   border-radius: 999px;
   transition: width 0.6s ease;
 }
@@ -1758,18 +1759,18 @@ button {
 }
 
 .quality-grade.grade-A {
-  background: #d1fae5;
-  color: #065f46;
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
 .quality-grade.grade-B {
-  background: #dbeafe;
-  color: #1e40af;
+  background: #eff6ff;
+  color: #2563eb;
 }
 
 .quality-grade.grade-C {
   background: #fef3c7;
-  color: #92400e;
+  color: #b45309;
 }
 
 .quality-grade.grade-D {
@@ -1780,10 +1781,11 @@ button {
 /* Insight Tabs */
 .insight-tabs {
   display: flex;
-  gap: 4px;
-  padding: 4px;
-  background: var(--section);
-  border-radius: 10px;
+  gap: 6px;
+  padding: 6px;
+  background: #f8fafc;
+  border-radius: 18px;
+  border: 1px solid #e5e7eb;
 }
 
 .insight-tab {
@@ -1791,15 +1793,15 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  padding: 8px 4px;
+  gap: 6px;
+  padding: 10px 8px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 12px;
   background: transparent;
-  color: var(--muted);
-  font-size: 10.5px;
-  font-weight: 600;
-  transition: var(--transition);
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 700;
+  transition: all 200ms ease;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1807,15 +1809,15 @@ button {
 }
 
 .insight-tab:hover {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.7);
+  color: #111827;
+  background: #ffffff;
 }
 
 .insight-tab.active {
   background: #ffffff;
   color: var(--tab-color, var(--primary));
-  border-color: var(--border);
-  box-shadow: var(--shadow-sm);
+  border-color: #bfdbfe;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.08);
 }
 
 /* Tab Content */
@@ -1832,7 +1834,7 @@ button {
   place-items: center;
   gap: 10px;
   padding: 30px 0;
-  color: var(--muted);
+  color: #6b7280;
   font-size: 13px;
 }
 
@@ -1848,7 +1850,7 @@ button {
 .insight-empty,
 .insight-empty-text {
   text-align: center;
-  color: var(--muted);
+  color: #6b7280;
   font-size: 13px;
   padding: 20px 0;
 }
@@ -1863,9 +1865,10 @@ button {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 8px 10px;
-  background: var(--section);
-  border-radius: 8px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
   font-size: 12px;
   line-height: 1.5;
   color: #374151;
@@ -1890,9 +1893,10 @@ button {
 }
 
 .mini-stat {
-  padding: 10px;
-  background: var(--section);
-  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
   display: grid;
   gap: 4px;
 }
@@ -1916,21 +1920,21 @@ button {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
   font-size: 13px;
   font-weight: 600;
   margin-top: 6px;
 }
 
 .growth-indicator.positive {
-  background: #d1fae5;
-  color: #065f46;
+  background: #ecfdf5;
+  color: #047857;
 }
 
 .growth-indicator.negative {
-  background: #fecaca;
-  color: #991b1b;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 /* Diagnostic Factors */
@@ -1941,14 +1945,14 @@ button {
 .factors-section h4 {
   margin: 0 0 8px;
   font-size: 13px;
-  color: #374151;
+  color: #111827;
 }
 
 .factor-row {
   display: grid;
   gap: 4px;
   padding: 8px 0;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid #eef2f7;
 }
 
 .factor-row:last-child {
@@ -1986,7 +1990,7 @@ button {
 
 .factor-bar-track {
   height: 6px;
-  background: #f3f4f6;
+  background: #e5e7eb;
   border-radius: 999px;
   overflow: hidden;
 }
@@ -2049,25 +2053,25 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border-radius: 14px;
   font-size: 12px;
   font-weight: 600;
   margin-top: 6px;
 }
 
 .trend-badge.trend-upward {
-  background: #d1fae5;
-  color: #065f46;
+  background: #ecfdf5;
+  color: #047857;
 }
 
 .trend-badge.trend-downward {
-  background: #fecaca;
-  color: #991b1b;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 .trend-badge.trend-flat {
-  background: #e5e7eb;
+  background: #f8fafc;
   color: #4b5563;
 }
 
@@ -2154,7 +2158,7 @@ button {
 .insight-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 10px;
 }
 
 .insight-action-btn {
@@ -2162,17 +2166,17 @@ button {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 10px 8px;
-  border-radius: 10px;
+  padding: 12px 10px;
+  border-radius: 14px;
   font-size: 12px;
-  font-weight: 600;
-  transition: var(--transition);
-  border: 1px solid var(--border);
+  font-weight: 700;
+  transition: all 200ms ease;
+  border: 1px solid #e5e7eb;
 }
 
 .why-btn {
-  background: linear-gradient(135deg, #fef3c7, #fffbeb);
-  color: #92400e;
+  background: linear-gradient(135deg, #fff7ed, #fffbeb);
+  color: #b45309;
   border-color: #fde68a;
 }
 
@@ -2183,7 +2187,7 @@ button {
 
 .explore-btn {
   background: linear-gradient(135deg, #dbeafe, #eff6ff);
-  color: #1e40af;
+  color: #1d4ed8;
   border-color: #bfdbfe;
 }
 
@@ -2194,10 +2198,10 @@ button {
 
 /* Exploration Panel */
 .exploration-panel {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--section);
-  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  background: #f8fafc;
+  padding: 14px;
   overflow: hidden;
 }
 
@@ -2233,8 +2237,8 @@ button {
 .anomaly-card {
   display: flex;
   gap: 8px;
-  padding: 8px 10px;
-  border-radius: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
   background: #ffffff;
   border: 1px solid var(--border);
   align-items: flex-start;
@@ -2303,8 +2307,8 @@ button {
   margin-top: 4px;
   font-size: 10px;
   font-weight: 700;
-  color: var(--muted);
-  background: var(--section);
+  color: #6b7280;
+  background: #f8fafc;
   padding: 2px 6px;
   border-radius: 4px;
 }

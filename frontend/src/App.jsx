@@ -19,6 +19,8 @@ import SearchInterface from './components/SearchInterface';
 import PricingV3 from './components/PricingV3';
 import ChatbotV2 from './components/ChatbotV2';
 import CustomDashboardBuilder from './components/CustomDashboardBuilder';
+import DashboardV2 from './components/DashboardV2';
+import InsightPanel from './components/InsightPanel';
 import LandingPage from './components/LandingPage';
 import LoginPage from './components/LoginPage';
 import SignupPage from './components/SignupPage';
@@ -171,6 +173,15 @@ export default function App() {
     useUserDb: Boolean(databaseInfo?.connected),
     datasetId: importedDataset?.datasetId || '',
   }), [dateRange, category, region, databaseInfo, importedDataset]);
+
+  const insightFilters = useMemo(() => (
+    activeFilters.useUserDb || activeFilters.datasetId
+      ? {
+        useUserDb: activeFilters.useUserDb,
+        datasetId: activeFilters.datasetId,
+      }
+      : activeFilters
+  ), [activeFilters]);
 
   useEffect(() => {
     if (!hasStarted) return;
@@ -496,7 +507,11 @@ export default function App() {
     }
 
     setActiveNav(next);
-    setActiveScreen('dashboard');
+    setActiveScreen(next === 'dashboard' ? 'custom-dashboard-builder' : next);
+
+    if (next !== 'chat') {
+      setIsChatOpen(false);
+    }
 
     if (next === 'chat') {
       setIsChatOpen(true);
@@ -655,6 +670,28 @@ export default function App() {
                     }
                   }}
                 />
+              </motion.div>
+            ) : activeScreen === 'reports' ? (
+              <motion.div
+                key="reports"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+              >
+                <section id="reports">
+                  <DashboardV2 plan={plan} filters={activeFilters} />
+                </section>
+              </motion.div>
+            ) : activeScreen === 'insights' ? (
+              <motion.div
+                key="insights"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+              >
+                <section id="insights">
+                  <InsightPanel filters={insightFilters} onExplore={() => setActiveNav('insights')} />
+                </section>
               </motion.div>
             ) : activeScreen === 'custom-dashboard-builder' ? (
               <motion.div

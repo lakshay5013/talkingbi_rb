@@ -3,42 +3,9 @@ import { motion } from 'framer-motion';
 import { Download, RefreshCcw, RotateCcw } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ScatterChart,
-  Scatter,
-  ZAxis,
-  AreaChart,
-  Area,
-  Treemap,
-  RadarChart,
-  Radar,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  FunnelChart,
-  Funnel,
-  Sankey,
-  Legend,
-} from 'recharts';
-
-const PIE_COLORS = ['#60A5FA', '#34D399', '#F59E0B', '#A78BFA', '#F472B6'];
-
-function renderPieDataLabel({ name, percent }) {
-  if (!percent || percent < 0.08) return '';
-  return `${(percent * 100).toFixed(0)}%`;
-}
+import { createRoot } from 'react-dom/client';
+import { renderWidgetChart, PIE_COLORS } from './chartRenderer.jsx';
+import ExportDashboardView from './ExportDashboardView';
 
 const WIDGET_CHART_OPTIONS = [
   'Bar Chart',
@@ -63,223 +30,7 @@ const WIDGET_CHART_OPTIONS = [
   'Pictogram',
 ];
 
-function compactLegendName(value) {
-  const text = String(value || '').trim();
-  if (!text) return '';
-  return text.length > 10 ? `${text.slice(0, 10)}...` : text;
-}
 
-function normalizeSeries(series = []) {
-  if (!Array.isArray(series) || series.length === 0) {
-    return [
-      { name: 'A', value: 10 },
-      { name: 'B', value: 14 },
-      { name: 'C', value: 8 },
-      { name: 'D', value: 13 },
-    ];
-  }
-  return series.map((item, idx) => ({
-    name: String(item?.name ?? `Item ${idx + 1}`),
-    value: Number(item?.value ?? 0),
-  }));
-}
-
-function toScatter(series = []) {
-  return normalizeSeries(series).map((item, idx) => ({
-    x: idx + 1,
-    y: Number(item.value || 0),
-    z: Math.max(60, Math.round(Number(item.value || 0) / 10)),
-    name: item.name,
-  }));
-}
-
-function renderWidgetChart(widget, darkMode) {
-  const chartType = String(widget?.chartType || 'Bar Chart');
-  const series = normalizeSeries(widget?.series);
-  const scatter = toScatter(series);
-  const settings = widget?.settings || {};
-  const axisColor = darkMode ? '#CBD5E1' : '#475569';
-  const gridColor = darkMode ? 'rgba(148,163,184,0.2)' : 'rgba(148,163,184,0.25)';
-  const lineColor = settings.lineColor || (darkMode ? '#60A5FA' : '#2563EB');
-  const barColor = settings.barColor || (darkMode ? '#38BDF8' : '#0EA5E9');
-  const lineWidth = Number(settings.lineWidth || 2.5);
-  const xAxisLabel = settings.xAxisLabel || (chartType === 'Line Graph' || chartType === 'Area Chart' ? 'Months' : 'Categories');
-  const yAxisLabel = settings.yAxisLabel || 'Value';
-  const pieColors = Array.isArray(settings.pieColors) && settings.pieColors.length > 0
-    ? settings.pieColors
-    : PIE_COLORS;
-  const activeBarStyle = { fill: barColor, stroke: barColor, strokeWidth: 1, opacity: 0.95 };
-  const tooltipContentStyle = {
-    background: darkMode ? '#0f172a' : '#ffffff',
-    border: darkMode ? '1px solid #334155' : '1px solid #cbd5e1',
-    borderRadius: '8px',
-    color: darkMode ? '#f8fafc' : '#0f172a',
-  };
-  const tooltipLabelStyle = { color: darkMode ? '#f8fafc' : '#0f172a', fontWeight: 600 };
-  const tooltipItemStyle = { color: darkMode ? '#f8fafc' : '#0f172a' };
-
-  if (chartType === 'Line Graph') {
-    return (
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={series}>
-          <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-          <XAxis dataKey="name" tick={{ fill: axisColor, fontSize: 11 }} label={{ value: xAxisLabel, position: 'insideBottom', offset: -6, fill: axisColor }} />
-          <YAxis tick={{ fill: axisColor, fontSize: 11 }} label={{ value: yAxisLabel, angle: -90, position: 'insideLeft', fill: axisColor }} />
-          <Tooltip cursor={{ stroke: lineColor, strokeWidth: 1, strokeDasharray: '3 3' }} contentStyle={tooltipContentStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} />
-          <Line type="monotone" dataKey="value" stroke={lineColor} strokeWidth={lineWidth} dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
-    );
-  }
-
-  if (chartType === 'Area Chart') {
-    return (
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={series}>
-          <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-          <XAxis dataKey="name" tick={{ fill: axisColor, fontSize: 11 }} label={{ value: xAxisLabel, position: 'insideBottom', offset: -6, fill: axisColor }} />
-          <YAxis tick={{ fill: axisColor, fontSize: 11 }} label={{ value: yAxisLabel, angle: -90, position: 'insideLeft', fill: axisColor }} />
-          <Tooltip cursor={{ fill: 'rgba(59,130,246,0.14)' }} contentStyle={tooltipContentStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} />
-          <Area type="monotone" dataKey="value" stroke={lineColor} fill={lineColor} fillOpacity={0.25} strokeWidth={lineWidth} />
-        </AreaChart>
-      </ResponsiveContainer>
-    );
-  }
-
-  if (chartType === 'Pie Chart' || chartType === 'Donut Chart' || chartType === 'Pictogram') {
-    return (
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Tooltip contentStyle={tooltipContentStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} />
-          <Pie
-            data={series}
-            dataKey="value"
-            nameKey="name"
-            innerRadius={chartType === 'Donut Chart' ? 48 : 0}
-            outerRadius={84}
-            labelLine={false}
-            label={renderPieDataLabel}
-            fontSize={10}
-          >
-            {series.map((entry, idx) => (
-              <Cell key={`${widget.id}-${entry.name}`} fill={pieColors[idx % pieColors.length]} />
-            ))}
-          </Pie>
-          <Legend
-            verticalAlign="bottom"
-            height={30}
-            wrapperStyle={{ color: darkMode ? '#e2e8f0' : '#334155', fontSize: 10 }}
-            formatter={(value) => compactLegendName(value)}
-          />
-        </PieChart>
-      </ResponsiveContainer>
-    );
-  }
-
-  if (chartType === 'Scatter Plot' || chartType === 'Bubble Chart' || chartType === 'Heatmap') {
-    return (
-      <ResponsiveContainer width="100%" height="100%">
-        <ScatterChart>
-          <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-          <XAxis type="number" dataKey="x" tick={{ fill: axisColor, fontSize: 11 }} />
-          <YAxis type="number" dataKey="y" tick={{ fill: axisColor, fontSize: 11 }} />
-          <ZAxis type="number" dataKey="z" range={chartType === 'Bubble Chart' ? [80, 700] : [50, 350]} />
-          <Tooltip cursor={{ stroke: barColor, strokeWidth: 1, strokeDasharray: '3 3' }} contentStyle={tooltipContentStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} />
-          <Scatter data={scatter} fill={barColor} />
-        </ScatterChart>
-      </ResponsiveContainer>
-    );
-  }
-
-  if (chartType === 'Stacked Bar Chart') {
-    return (
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart
-          data={series.map((item) => ({
-            name: item.name,
-            actual: Math.round(item.value * 0.7),
-            projected: Math.round(item.value * 0.3),
-          }))}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-          <XAxis dataKey="name" tick={{ fill: axisColor, fontSize: 11 }} />
-          <YAxis tick={{ fill: axisColor, fontSize: 11 }} />
-          <Tooltip cursor={{ fill: 'rgba(59,130,246,0.14)' }} contentStyle={tooltipContentStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} />
-          <Bar stackId="stack" dataKey="actual" fill={barColor} activeBar={activeBarStyle} />
-          <Bar stackId="stack" dataKey="projected" fill="#10B981" activeBar={{ fill: '#10B981', stroke: '#10B981', strokeWidth: 1, opacity: 0.95 }} />
-        </BarChart>
-      </ResponsiveContainer>
-    );
-  }
-
-  if (chartType === 'Treemap') {
-    return (
-      <ResponsiveContainer width="100%" height="100%">
-        <Treemap data={series.map((item) => ({ name: item.name, size: item.value }))} dataKey="size" stroke="#FFFFFF" fill="#3B82F6" />
-      </ResponsiveContainer>
-    );
-  }
-
-  if (chartType === 'Radar (Spider) Chart') {
-    return (
-      <ResponsiveContainer width="100%" height="100%">
-        <RadarChart data={series}>
-          <PolarGrid stroke={gridColor} />
-          <PolarAngleAxis dataKey="name" stroke={axisColor} />
-          <PolarRadiusAxis stroke={axisColor} />
-          <Radar name="Value" dataKey="value" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.35} />
-          <Tooltip contentStyle={tooltipContentStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} />
-        </RadarChart>
-      </ResponsiveContainer>
-    );
-  }
-
-  if (chartType === 'Funnel Chart') {
-    return (
-      <ResponsiveContainer width="100%" height="100%">
-        <FunnelChart>
-          <Tooltip contentStyle={tooltipContentStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} />
-          <Funnel dataKey="value" data={series} isAnimationActive nameKey="name">
-            {series.map((entry, idx) => (
-              <Cell key={`${widget.id}-funnel-${entry.name}`} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
-            ))}
-          </Funnel>
-        </FunnelChart>
-      </ResponsiveContainer>
-    );
-  }
-
-  if (chartType === 'Sankey Diagram') {
-    return (
-      <ResponsiveContainer width="100%" height="100%">
-        <Sankey
-          data={{
-            nodes: series.map((item) => ({ name: item.name })),
-            links: series.slice(0, Math.max(series.length - 1, 0)).map((item, idx) => ({
-              source: idx,
-              target: idx + 1,
-              value: Math.max(1, Math.round(item.value / 1000)),
-            })),
-          }}
-          nodePadding={30}
-          nodeWidth={12}
-        />
-      </ResponsiveContainer>
-    );
-  }
-
-  return (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={series}>
-        <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-        <XAxis dataKey="name" tick={{ fill: axisColor, fontSize: 11 }} />
-        <YAxis tick={{ fill: axisColor, fontSize: 11 }} />
-        <Tooltip cursor={{ fill: 'rgba(59,130,246,0.14)' }} contentStyle={tooltipContentStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} />
-        <Bar dataKey="value" fill={barColor} radius={[6, 6, 0, 0]} activeBar={activeBarStyle} />
-      </BarChart>
-    </ResponsiveContainer>
-  );
-}
 
 function WidgetEditPanel({ widget, onChange, premiumEnabled }) {
   if (!premiumEnabled) return null;
@@ -294,33 +45,33 @@ function WidgetEditPanel({ widget, onChange, premiumEnabled }) {
     : PIE_COLORS;
 
   return (
-    <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/8 p-3">
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-200">Premium edit</div>
+    <div className="mb-3 rounded-xl border border-[#BFDBFE] bg-[#EFF6FF] p-3">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#2563EB]">Premium edit</div>
       <div className="grid gap-2 sm:grid-cols-2">
         {isBarLike ? (
-          <label className="flex flex-col gap-1 text-xs text-slate-300">
+          <label className="flex flex-col gap-1 text-xs text-[#6B7280]">
             Bar color
             <input
               type="color"
               value={settings.barColor || '#3B82F6'}
               onChange={(event) => onChange({ settings: { barColor: event.target.value } })}
-              className="h-9 w-full rounded border border-slate-700 bg-slate-950 p-1"
+              className="h-9 w-full rounded border border-[#E5E7EB] bg-white p-1"
             />
           </label>
         ) : null}
 
         {isLineLike ? (
           <>
-            <label className="flex flex-col gap-1 text-xs text-slate-300">
+            <label className="flex flex-col gap-1 text-xs text-[#6B7280]">
               Line color
               <input
                 type="color"
                 value={settings.lineColor || '#60A5FA'}
                 onChange={(event) => onChange({ settings: { lineColor: event.target.value } })}
-                className="h-9 w-full rounded border border-slate-700 bg-slate-950 p-1"
+                className="h-9 w-full rounded border border-[#E5E7EB] bg-white p-1"
               />
             </label>
-            <label className="flex flex-col gap-1 text-xs text-slate-300">
+            <label className="flex flex-col gap-1 text-xs text-[#6B7280]">
               Line thickness
               <input
                 type="range"
@@ -331,22 +82,22 @@ function WidgetEditPanel({ widget, onChange, premiumEnabled }) {
                 onChange={(event) => onChange({ settings: { lineWidth: Number(event.target.value) } })}
               />
             </label>
-            <label className="flex flex-col gap-1 text-xs text-slate-300">
+            <label className="flex flex-col gap-1 text-xs text-[#6B7280]">
               X label
               <input
                 type="text"
                 value={settings.xAxisLabel || 'Months'}
                 onChange={(event) => onChange({ settings: { xAxisLabel: event.target.value } })}
-                className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100 outline-none"
+                className="rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#111827] outline-none transition focus:border-[#2563EB] focus:ring-4 focus:ring-[rgba(37,99,235,0.16)]"
               />
             </label>
-            <label className="flex flex-col gap-1 text-xs text-slate-300">
+            <label className="flex flex-col gap-1 text-xs text-[#6B7280]">
               Y label
               <input
                 type="text"
                 value={settings.yAxisLabel || 'Value'}
                 onChange={(event) => onChange({ settings: { yAxisLabel: event.target.value } })}
-                className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100 outline-none"
+                className="rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#111827] outline-none transition focus:border-[#2563EB] focus:ring-4 focus:ring-[rgba(37,99,235,0.16)]"
               />
             </label>
           </>
@@ -354,10 +105,10 @@ function WidgetEditPanel({ widget, onChange, premiumEnabled }) {
 
         {isPieLike ? (
           <div className="sm:col-span-2">
-            <div className="mb-1 text-xs text-slate-300">Pie colors</div>
+            <div className="mb-1 text-xs text-[#6B7280]">Pie colors</div>
             <div className="grid grid-cols-5 gap-2">
               {pieColors.slice(0, 5).map((color, idx) => (
-                <label key={`${widget.id}-pie-color-${idx}`} className="flex flex-col gap-1 text-[11px] text-slate-400">
+                <label key={`${widget.id}-pie-color-${idx}`} className="flex flex-col gap-1 text-[11px] text-[#9CA3AF]">
                   C{idx + 1}
                   <input
                     type="color"
@@ -367,7 +118,7 @@ function WidgetEditPanel({ widget, onChange, premiumEnabled }) {
                       next[idx] = event.target.value;
                       onChange({ settings: { pieColors: next } });
                     }}
-                    className="h-9 w-full rounded border border-slate-700 bg-slate-950 p-1"
+                    className="h-9 w-full rounded border border-[#E5E7EB] bg-white p-1"
                   />
                 </label>
               ))}
@@ -486,7 +237,7 @@ export default function Dashboard({ widgets = [], generationNote = '', darkMode 
     }
 
     iframeDoc.open();
-    iframeDoc.write('<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:' + (darkMode ? '#0b1220' : '#ffffff') + ';}</style></head><body></body></html>');
+    iframeDoc.write('<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:#F5F7FB;}</style></head><body></body></html>');
     iframeDoc.close();
 
     const clonedRoot = target.cloneNode(true);
@@ -497,7 +248,7 @@ export default function Dashboard({ widgets = [], generationNote = '', darkMode 
     try {
       const canvasPromise = html2canvas(clonedRoot, {
         scale: 1.5, // Reduced for faster rendering
-        backgroundColor: darkMode ? '#0b1220' : '#ffffff',
+        backgroundColor: '#F5F7FB',
         useCORS: true,
         allowTaint: true,
         logging: false,
@@ -512,7 +263,7 @@ export default function Dashboard({ widgets = [], generationNote = '', darkMode 
       console.warn('Primary canvas capture failed, trying fallback:', _firstErr.message);
       const fallbackPromise = html2canvas(clonedRoot, {
         scale: 1,
-        backgroundColor: darkMode ? '#0b1220' : '#ffffff',
+        backgroundColor: '#F5F7FB',
         useCORS: true,
         allowTaint: true,
         foreignObjectRendering: false,
@@ -526,6 +277,40 @@ export default function Dashboard({ widgets = [], generationNote = '', darkMode 
       return await Promise.race([fallbackPromise, timeoutPromise]);
     } finally {
       iframe.remove();
+    }
+  };
+
+  const captureExportCanvas = async () => {
+    await waitForPaint();
+
+    const container = document.createElement('div');
+    container.setAttribute('aria-hidden', 'true');
+    container.style.position = 'fixed';
+    container.style.left = '-10000px';
+    container.style.top = '0';
+    container.style.width = '1200px';
+    container.style.padding = '24px';
+    container.style.background = '#F8FAFC';
+    document.body.appendChild(container);
+
+    const root = createRoot(container);
+    root.render(<ExportDashboardView widgets={widgets} generatedOn={new Date()} />);
+
+    // allow render and fonts to settle
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    try {
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        backgroundColor: '#F8FAFC',
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+      });
+      return canvas;
+    } finally {
+      try { root.unmount(); } catch (e) { /* ignore */ }
+      container.remove();
     }
   };
 
@@ -553,7 +338,7 @@ export default function Dashboard({ widgets = [], generationNote = '', darkMode 
 
     setIsExporting(true);
     try {
-      const canvas = await captureBoardCanvas();
+      const canvas = await captureExportCanvas();
 
       if (format === 'png') {
         const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
@@ -612,32 +397,33 @@ export default function Dashboard({ widgets = [], generationNote = '', darkMode 
     <motion.section
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl border border-slate-700 bg-slate-950 p-4 shadow-[0_16px_38px_rgba(2,6,23,0.45)]"
+      className="rounded-[28px] border border-[#E5E7EB] bg-white p-5 md:p-7"
+      style={{ boxShadow: '0 10px 30px rgba(37,99,235,0.08)' }}
     >
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold text-slate-100">Step 2: Generated Dashboard</h3>
-          <p className="text-sm text-slate-400">Power BI style analytics board generated from KPI + selected graphs + dataset filters.</p>
+          <h3 className="text-[28px] font-bold tracking-[-0.02em] text-[#111827]">Step 2: Generated Dashboard</h3>
+          <p className="mt-1 text-sm text-[#6B7280]">Power BI style analytics board generated from KPI + selected graphs + dataset filters.</p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2.5">
           <button
             type="button"
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-[#2563EB] bg-white px-4 py-2 text-sm font-semibold text-[#2563EB] shadow-[0_1px_2px_rgba(17,24,39,0.06)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#EFF6FF] hover:shadow-[0_10px_20px_rgba(37,99,235,0.16)]"
             onClick={onBack}
           >
             <RotateCcw size={15} /> Back to Selection
           </button>
           <button
             type="button"
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-[#BFDBFE] bg-[#EFF6FF] px-4 py-2 text-sm font-semibold text-[#2563EB] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#DBEAFE] hover:shadow-[0_10px_20px_rgba(37,99,235,0.16)]"
             onClick={onRegenerate}
           >
             <RefreshCcw size={15} /> Regenerate Dashboard
           </button>
           <button
             type="button"
-            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[linear-gradient(135deg,#22C55E,#16A34A)] px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(34,197,94,0.3)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_14px_26px_rgba(34,197,94,0.34)] disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => downloadAs('pdf')}
             disabled={isExporting}
           >
@@ -645,7 +431,7 @@ export default function Dashboard({ widgets = [], generationNote = '', darkMode 
           </button>
           <button
             type="button"
-            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[linear-gradient(135deg,#4F46E5,#3B82F6)] px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(79,70,229,0.28)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_14px_26px_rgba(79,70,229,0.34)] disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => downloadAs('png')}
             disabled={isExporting}
           >
@@ -654,34 +440,46 @@ export default function Dashboard({ widgets = [], generationNote = '', darkMode 
         </div>
       </div>
 
-      {generationNote ? <p className="mb-3 text-xs text-slate-300">{generationNote}</p> : null}
+      {generationNote ? <p className="mb-4 text-xs font-medium text-[#6B7280]">{generationNote}</p> : null}
 
-      <div ref={boardRef} className="rounded-2xl border border-slate-700/80 bg-[#0b1220] p-4">
+      <div ref={boardRef} className="rounded-[24px] border border-[#E5E7EB] bg-[#F5F7FB] p-4 md:p-5">
         {widgets.some((item) => item.id === 'kpi-cards') && (
-          <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {widgets.filter((item) => item.id !== 'kpi-cards').slice(0, 4).map((widget) => (
-              <article key={`kpi-${widget.id}`} className="rounded-xl border border-slate-700 bg-slate-900/80 p-3">
-                <p className="text-xs text-slate-400">{widget.name}</p>
-                <p className="mt-1 text-lg font-semibold text-slate-100">{widget.kpiValue || 'N/A'}</p>
-                <p className="text-xs text-emerald-400">+{widget.kpiDelta || '0.0%'} </p>
-              </article>
+              <motion.article
+                key={`kpi-${widget.id}`}
+                whileHover={{ y: -3 }}
+                transition={{ duration: 0.2 }}
+                className="rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-[0_8px_22px_rgba(37,99,235,0.08)]"
+              >
+                <p className="text-xs font-medium text-[#9CA3AF]">{widget.name}</p>
+                <p className="mt-1.5 text-xl font-bold text-[#111827]">{widget.kpiValue || 'N/A'}</p>
+                <p className="text-xs font-semibold text-[#22C55E]">+{widget.kpiDelta || '0.0%'} </p>
+              </motion.article>
             ))}
           </div>
         )}
 
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
           {widgets.filter((item) => item.id !== 'kpi-cards').map((widget) => (
-            <article key={widget.id} className="rounded-xl border border-slate-700 bg-slate-900/80 p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-slate-100">{widget.name}</h4>
-                <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-300">{widget.chartType}</span>
+            <motion.article
+              key={widget.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              whileHover={{ y: -4 }}
+              transition={{ duration: 0.25 }}
+              className="rounded-[24px] border border-[#E5E7EB] bg-white p-4 shadow-[0_8px_22px_rgba(37,99,235,0.08)]"
+            >
+              <div className="mb-3 flex items-center justify-between gap-3 border-b border-[#E5E7EB] pb-3">
+                <h4 className="text-sm font-semibold text-[#111827]">{widget.name}</h4>
+                <span className="rounded-full border border-[#BFDBFE] bg-[#EFF6FF] px-2.5 py-1 text-[11px] font-semibold text-[#2563EB]">{widget.chartType}</span>
               </div>
               <div className="mb-3">
-                <label className="mb-1 block text-xs font-medium text-slate-400">Chart Type</label>
+                <label className="mb-1.5 block text-xs font-semibold text-[#6B7280]">Chart Type</label>
                 <select
                   value={widget.chartType}
                   onChange={(event) => onWidgetChange?.(widget.id, { chartType: event.target.value })}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-blue-500"
+                  className="w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm text-[#111827] outline-none transition-all duration-300 focus:border-[#2563EB] focus:ring-4 focus:ring-[rgba(37,99,235,0.16)]"
                 >
                   {WIDGET_CHART_OPTIONS.map((chartName) => (
                     <option key={`${widget.id}-option-${chartName}`} value={chartName}>
@@ -691,13 +489,13 @@ export default function Dashboard({ widgets = [], generationNote = '', darkMode 
                 </select>
               </div>
               {widget.failureReason ? (
-                <div className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                <div className="mb-3 rounded-xl border border-[#FCD34D] bg-[#FFFBEB] px-3 py-2 text-xs text-[#92400E]">
                   <span className="font-semibold">Why graph may not be accurate: </span>
                   {widget.failureReason}
                 </div>
               ) : null}
               {widget.insightText ? (
-                <div className="mb-3 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
+                <div className="mb-3 rounded-xl border border-[#BFDBFE] bg-[#EFF6FF] px-3 py-2 text-xs text-[#1E3A8A]">
                   <span className="font-semibold">KPI Insight: </span>
                   {widget.insightText}
                 </div>
@@ -709,10 +507,10 @@ export default function Dashboard({ widgets = [], generationNote = '', darkMode 
                   onChange={(patch) => onWidgetChange?.(widget.id, patch)}
                 />
               ) : null}
-              <div className="h-64">
+              <div className="h-64 rounded-2xl border border-[#E5E7EB] bg-white p-2">
                 {renderWidgetChart(widget, darkMode)}
               </div>
-            </article>
+            </motion.article>
           ))}
         </div>
       </div>
